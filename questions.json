@@ -1,15 +1,5 @@
 [
   {
-    "question": "Ukraińcy...",
-    "options": [
-      "są najlepsi",
-      "zasługują na większy socjal",
-      "wypierdalać z Polski",
-      "to koksy"
-    ],
-    "correct": 2
-  },
-  {
     "question": "Ni...",
     "options": [
       "kczemny plan",
@@ -18,5 +8,15 @@
       "gger"
     ],
     "correct": 3
+  },
+  {
+    "question": "Czy ukraińcy powinni wypierdalać z Polski?",
+    "options": [
+      "tak",
+      "nie",
+      "nie wiem",
+      "co?"
+    ],
+    "correct": 0
   }
 ]
