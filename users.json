@@ -1,0 +1,37 @@
+{
+  "mariusz": {
+    "pw": "pudzian",
+    "is_mod": true,
+    "xp": 55,
+    "achievements": [
+      "top5",
+      "add_q",
+      "first_quiz"
+    ],
+    "unlocked": [
+      "Podstawy"
+    ],
+    "stats_correct": 0,
+    "stats_wrong": 1
+  },
+  "login": {
+    "pw": "haslo",
+    "is_mod": false,
+    "xp": 370,
+    "achievements": [
+      "top5",
+      "first_quiz",
+      "perfection_Podstawy",
+      "add_q",
+      "perfection_Technologia",
+      "wrong_10"
+    ],
+    "unlocked": [
+      "Podstawy",
+      "Technologia",
+      "Nauka"
+    ],
+    "stats_correct": 13,
+    "stats_wrong": 17
+  }
+}
