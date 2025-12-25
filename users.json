@@ -9,29 +9,62 @@
       "first_quiz"
     ],
     "unlocked": [
-      "Podstawy"
+      "Agile_Podstawy"
     ],
     "stats_correct": 0,
     "stats_wrong": 1
   },
   "login": {
-    "pw": "haslo",
+    "pw": "610de44a9d6ce50f18f175d98472a3eb25739f55bb2c1a4cd3aa0fe6bec505e6",
     "is_mod": false,
-    "xp": 370,
+    "xp": 780,
     "achievements": [
       "top5",
       "first_quiz",
-      "perfection_Podstawy",
+      "perfection_Agile_Podstawy",
       "add_q",
-      "perfection_Technologia",
-      "wrong_10"
+      "perfection_Scrum",
+      "wrong_10",
+      "correct_25",
+      "perfection_Praktyki"
     ],
     "unlocked": [
-      "Podstawy",
-      "Technologia",
-      "Nauka"
+      "Agile_Podstawy",
+      "Scrum",
+      "Praktyki"
     ],
-    "stats_correct": 13,
-    "stats_wrong": 17
+    "stats_correct": 38,
+    "stats_wrong": 24
+  },
+  "BlackNiga": {
+    "pw": "b79ea147556192d9bb9d77f65ded8a7a1d623137d1a7dc532f252dd9d93ce463",
+    "is_mod": true,
+    "xp": 255,
+    "unlocked": [
+      "Agile_Podstawy"
+    ],
+    "achievements": [
+      "wrong_10",
+      "first_quiz"
+    ],
+    "stats_correct": 10,
+    "stats_wrong": 21
+  },
+  "asbolute": {
+    "pw": "e5fd19f3448e888803354b6f4a51941d611d0c3299670e10ae9a31abcf06c3d8",
+    "is_mod": true,
+    "xp": 240,
+    "unlocked": [
+      "Agile_Podstawy",
+      "Praktyki"
+    ],
+    "achievements": [
+      "wrong_10",
+      "first_quiz",
+      "perfection_Scrum",
+      "perfection_Praktyki"
+    ],
+    "stats_correct": 11,
+    "stats_wrong": 15
   }
 }

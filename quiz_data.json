@@ -1,256 +1,326 @@
 {
-  "Podstawy": [
+  "Agile_Podstawy": [
     {
-      "question": "2+2",
+      "question": "Co to jest Agile?",
+      "options": [
+        "Metodologia zarządzania projektami oparta na iteracyjnym i przyrostowym podejściu",
+        "Narzędzie do śledzenia błędów w kodzie",
+        "Framework do testowania oprogramowania",
+        "Język programowania"
+      ],
+      "correct": 0
+    },
+    {
+      "question": "Które z poniższych jest jedną z wartości Manifestu Agile?",
+      "options": [
+        "Dokumentacja nad współpracę",
+        "Osoby i interakcje nad procesy i narzędzia",
+        "Stały plan nad reagowanie na zmiany",
+        "Kontrakt nad negocjacje"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co oznacza akronim MVP w kontekście Agile?",
+      "options": [
+        "Most Valuable Player",
+        "Minimum Viable Product",
+        "Maximum Value Proposition",
+        "Multi Version Platform"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Ile jest zasad w Manifestie Agile?",
       "options": [
         "4",
-        "5",
-        "6",
-        "7"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "7+8",
-      "options": [
-        "15",
-        "16",
-        "17",
-        "18"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    },
-    {
-      "question": "Test?",
-      "options": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "correct": 0
-    }
-  ],
-  "Technologia": [
-    {
-      "question": "3+4",
-      "options": [
-        "7",
         "8",
-        "9",
-        "10"
+        "12",
+        "16"
+      ],
+      "correct": 2
+    },
+    {
+      "question": "Co oznacza termin 'User Story' w Agile?",
+      "options": [
+        "Historia użytkownika opowiedziana przez Product Ownera",
+        "Krótki opis funkcjonalności z perspektywy użytkownika końcowego",
+        "Dokumentacja techniczna funkcji",
+        "Plan testów użytkownika"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Które z poniższych NIE jest metodą Agile?",
+      "options": [
+        "Scrum",
+        "Kanban",
+        "Waterfall",
+        "Extreme Programming (XP)"
+      ],
+      "correct": 2
+    },
+    {
+      "question": "Co to jest 'Sprint' w kontekście Agile?",
+      "options": [
+        "Szybkie spotkanie zespołu",
+        "Okres czasu, w którym zespół pracuje nad konkretnym zestawem zadań",
+        "Narzędzie do śledzenia czasu",
+        "Rodzaj raportu"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Jakie jest główne założenie metodyki Agile?",
+      "options": [
+        "Szczegółowe planowanie na początku projektu",
+        "Reagowanie na zmiany jest ważniejsze niż podążanie za planem",
+        "Rygorystyczne przestrzeganie dokumentacji",
+        "Długie cykle produkcyjne"
+      ],
+      "correct": 1
+    }
+  ],
+  "Scrum": [
+    {
+      "question": "Ile ról jest w Scrum?",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Kto odpowiada za Product Backlog w Scrum?",
+      "options": [
+        "Scrum Master",
+        "Product Owner",
+        "Development Team",
+        "Project Manager"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Jaka jest typowa długość Sprintu w Scrum?",
+      "options": [
+        "1 tydzień",
+        "1-4 tygodnie",
+        "2 miesiące",
+        "6 miesięcy"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Ile zdarzeń (events) jest w Scrum?",
+      "options": [
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "correct": 2
+    },
+    {
+      "question": "Co to jest Daily Scrum?",
+      "options": [
+        "Cotygodniowe spotkanie zespołu",
+        "Codzienne 15-minutowe spotkanie synchronizacyjne",
+        "Miesięczny przegląd sprintu",
+        "Spotkanie planowania sprintu"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Kto prowadzi Daily Scrum?",
+      "options": [
+        "Product Owner",
+        "Scrum Master",
+        "Development Team",
+        "Project Manager"
+      ],
+      "correct": 2
+    },
+    {
+      "question": "Co to jest Sprint Retrospective?",
+      "options": [
+        "Prezentacja wyników sprintu",
+        "Spotkanie, podczas którego zespół omawia co poszło dobrze i co można poprawić",
+        "Planowanie zadań na następny sprint",
+        "Codzienna synchronizacja"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest Definition of Done (DoD)?",
+      "options": [
+        "Lista zadań do wykonania w sprincie",
+        "Kryteria określające, kiedy zadanie jest uznane za ukończone",
+        "Opis wymagań produktu",
+        "Harmonogram projektu"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Ile artefaktów jest w Scrum?",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Które z poniższych jest artefaktem Scrum?",
+      "options": [
+        "Burndown Chart",
+        "Gantt Chart",
+        "Risk Register",
+        "Status Report"
+      ],
+      "correct": 0
+    },
+    {
+      "question": "Co to jest Sprint Planning?",
+      "options": [
+        "Planowanie całego projektu",
+        "Spotkanie na początku sprintu, podczas którego zespół planuje pracę",
+        "Codzienne spotkanie zespołu",
+        "Przegląd końcowy projektu"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Jaka jest maksymalna zalecana liczba członków Development Team w Scrum?",
+      "options": [
+        "5-9 osób",
+        "10-15 osób",
+        "3-5 osób",
+        "Nie ma ograniczeń"
       ],
       "correct": 0
     }
   ],
-  "Nauka": [
+  "Praktyki": [
     {
-      "question": "3+3",
+      "question": "Co to jest Kanban Board?",
       "options": [
-        "5",
-        "6",
-        "7",
-        "8"
+        "Tablica wizualizująca przepływ pracy przez różne etapy",
+        "System zarządzania bazą danych",
+        "Narzędzie do śledzenia błędów",
+        "Platforma komunikacyjna"
+      ],
+      "correct": 0
+    },
+    {
+      "question": "Co oznacza termin 'Continuous Integration'?",
+      "options": [
+        "Ciągłe testowanie",
+        "Automatyczne łączenie zmian w kodzie z główną gałęzią",
+        "Ciągłe wdrażanie",
+        "Ciągły monitoring"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest 'Pair Programming'?",
+      "options": [
+        "Programowanie w parach, gdzie dwie osoby pracują razem nad tym samym kodem",
+        "Programowanie równoległe",
+        "Programowanie sekwencyjne",
+        "Programowanie asynchroniczne"
+      ],
+      "correct": 0
+    },
+    {
+      "question": "Co to jest 'Test-Driven Development' (TDD)?",
+      "options": [
+        "Pisanie testów po napisaniu kodu",
+        "Pisanie testów przed napisaniem kodu produkcyjnego",
+        "Testowanie tylko funkcji krytycznych",
+        "Automatyczne testowanie"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co oznacza 'Velocity' w Scrum?",
+      "options": [
+        "Szybkość internetu",
+        "Miernik wydajności zespołu, pokazujący ile pracy zespół może wykonać w sprincie",
+        "Czas trwania sprintu",
+        "Liczba błędów w kodzie"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest 'Burndown Chart'?",
+      "options": [
+        "Wykres pokazujący wzrost wydajności",
+        "Wykres pokazujący pozostałą pracę w czasie",
+        "Wykres pokazujący liczbę błędów",
+        "Wykres pokazujący liczbę użytkowników"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest 'Refactoring'?",
+      "options": [
+        "Dodawanie nowych funkcji",
+        "Przepisywanie kodu bez zmiany jego funkcjonalności, aby poprawić jego strukturę",
+        "Usuwanie błędów",
+        "Zmiana wymagań"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co oznacza 'Timeboxing'?",
+      "options": [
+        "Szacowanie czasu zadania",
+        "Przydzielanie maksymalnego czasu na wykonanie określonej aktywności",
+        "Mierzenie czasu pracy",
+        "Planowanie kalendarza"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest 'Sprint Review'?",
+      "options": [
+        "Retrospektywa sprintu",
+        "Prezentacja wyników sprintu dla stakeholderów",
+        "Codzienne spotkanie",
+        "Planowanie sprintu"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co oznacza 'Increment' w Scrum?",
+      "options": [
+        "Zwiększenie zespołu",
+        "Przyrost działającego produktu, który można dostarczyć",
+        "Zwiększenie czasu sprintu",
+        "Dodatkowe zadania"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Co to jest 'Backlog Refinement'?",
+      "options": [
+        "Usuwanie zadań z backlogu",
+        "Proces poprawiania i przygotowywania zadań w backlogu",
+        "Zakończenie projektu",
+        "Codzienna synchronizacja"
+      ],
+      "correct": 1
+    },
+    {
+      "question": "Które z poniższych jest przykładem praktyki Agile?",
+      "options": [
+        "Szczegółowa dokumentacja przed rozpoczęciem kodowania",
+        "Frequent delivery of working software",
+        "Długie cykle testowania",
+        "Sztywne harmonogramy"
       ],
       "correct": 1
     }
