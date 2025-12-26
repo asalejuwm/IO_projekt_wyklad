@@ -19,6 +19,10 @@ BASE_FONT_SIZE = 22
 DATA_FILE = "quiz_data.json"
 USERS_FILE = "users.json"
 
+# Lista dozwolonych kont moderatorów (tylko te konta mogą być moderatorskie)
+# Maksymalnie 3 konta mogą być moderatorskie
+MODERATOR_USERS = ["mariusz", "BlackNiga", "asbolute"]
+
 # Walidacja danych
 MIN_USERNAME_LEN = 3
 MAX_USERNAME_LEN = 20
@@ -518,6 +522,14 @@ def show_leaderboard(screen, font, users, screen_width, screen_height, scale):
 # ================== MODYFIKACJA PYTAŃ ==================
 
 def add_question_screen(screen, font, data, module, username, users, screen_width, screen_height, scale):
+    # Sprawdzenie uprawnień - tylko moderatorzy mogą dodawać pytania
+    if not users.get(username, {}).get("is_mod", False):
+        screen.fill(BG_COLOR)
+        error_msg = font.render("Brak uprawnień! Tylko moderatorzy mogą dodawać pytania.", True, (255, 100, 100))
+        screen.blit(error_msg, (screen_width // 2 - error_msg.get_width() // 2, screen_height // 2))
+        pygame.display.flip()
+        pygame.time.wait(2000)
+        return
     inputs = [
         InputBox((225, 80, 500, 45), "Treść pytania", scale=scale, screen_width=screen_width, center_horizontal=True),
         InputBox((225, 140, 500, 45), "Opcja A", scale=scale, screen_width=screen_width, center_horizontal=True),
@@ -697,7 +709,6 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
     mode = "login";
     u_box = InputBox((325, 250, 300, 45), "Username", scale=scale, screen_width=screen_width, center_horizontal=True)
     p_box = InputBox((325, 310, 300, 45), "Password", password=True, scale=scale, screen_width=screen_width, center_horizontal=True)
-    mod_check = Checkbox(325, 370, "Moderator", scale=scale, screen_width=screen_width, center_horizontal=True)
     btn_action = Button(325, 420, 300, "Zaloguj", font, scale=scale, screen_width=screen_width, center_horizontal=True)
     btn_switch = Button(325, 480, 300, "Zmień na Rejestrację", font, scale=scale, screen_width=screen_width, center_horizontal=True)
     feedback = ""
@@ -706,7 +717,6 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
         # Aktualizacja pozycji przy zmianie rozmiaru
         u_box.update_rect(screen_width)
         p_box.update_rect(screen_width)
-        mod_check.update_rect(screen_width)
         btn_action.update_position_and_size(screen_width)
         btn_switch.update_position_and_size(screen_width)
         
@@ -717,7 +727,6 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
         screen.blit(title_surf, (screen_width // 2 - title_surf.get_width() // 2, scale_value(150, scale)))
         u_box.draw(screen, font);
         p_box.draw(screen, font)
-        if mode == "register": mod_check.draw(screen, font)
         btn_action.draw(screen, mouse);
         btn_switch.draw(screen, mouse)
         if feedback:
@@ -738,7 +747,6 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
                 break
             u_box.handle_event(event);
             p_box.handle_event(event)
-            if mode == "register": mod_check.handle_event(event)
             if btn_switch.clicked(event):
                 mode = "register" if mode == "login" else "login"
                 btn_action = Button(325, 420, 300, "Zaloguj" if mode == "login" else "Zarejestruj", font, scale=scale, screen_width=screen_width, center_horizontal=True)
@@ -762,9 +770,11 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
                         feedback = "Użytkownik już istnieje!"
                     else:
                         first_mod = list(quiz_data.keys())[0] if quiz_data else ""
+                        # Ustaw is_mod na True tylko jeśli użytkownik jest na liście moderatorów
+                        is_moderator = u in MODERATOR_USERS
                         users[u] = {
                             "pw": hash_password(p),  # Hashowanie hasła
-                            "is_mod": mod_check.checked,
+                            "is_mod": is_moderator,  # Tylko użytkownicy z listy mogą być moderatorami
                             "xp": 0,
                             "unlocked": [first_mod] if first_mod else [],
                             "achievements": [],
@@ -975,14 +985,28 @@ def main():
             stats_surf = font.render(stats_text, True, (200, 200, 100))
             screen.blit(stats_surf, (scale_value(20, scale), scale_value(20, scale)))
 
+            # Budowanie listy przycisków menu - tylko moderatorzy widzą przyciski administracyjne
             main_btns = [
                 Button(375, 150, 200, "Start Quiz", font, data="start", scale=scale, screen_width=screen_width, center_horizontal=True),
-                Button(375, 230, 200, "Dodaj Pytanie", font, data="add", scale=scale, screen_width=screen_width, center_horizontal=True),
-                Button(375, 310, 200, "Usuń Pytania", font, data="del", locked=not is_mod, scale=scale, screen_width=screen_width, center_horizontal=True),
-                Button(375, 390, 200, "Achievements", font, data="ach", scale=scale, screen_width=screen_width, center_horizontal=True),
-                Button(375, 470, 200, "Ranking", font, data="rank", scale=scale, screen_width=screen_width, center_horizontal=True),
-                Button(375, 550, 200, "Wyloguj", font, data="logout", scale=scale, screen_width=screen_width, center_horizontal=True)
             ]
+            
+            # Przyciski tylko dla moderatorów
+            if is_mod:
+                main_btns.append(Button(375, 230, 200, "Dodaj Pytanie", font, data="add", scale=scale, screen_width=screen_width, center_horizontal=True))
+                main_btns.append(Button(375, 310, 200, "Usuń Pytania", font, data="del", scale=scale, screen_width=screen_width, center_horizontal=True))
+                achievements_y = 390
+                ranking_y = 470
+                logout_y = 550
+            else:
+                achievements_y = 230
+                ranking_y = 310
+                logout_y = 390
+            
+            main_btns.extend([
+                Button(375, achievements_y, 200, "Achievements", font, data="ach", scale=scale, screen_width=screen_width, center_horizontal=True),
+                Button(375, ranking_y, 200, "Ranking", font, data="rank", scale=scale, screen_width=screen_width, center_horizontal=True),
+                Button(375, logout_y, 200, "Wyloguj", font, data="logout", scale=scale, screen_width=screen_width, center_horizontal=True)
+            ])
             # Aktualizacja pozycji przycisków
             for btn in main_btns:
                 btn.update_position_and_size(screen_width)
@@ -1003,11 +1027,15 @@ def main():
                 m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
                 if m: quiz_loop(screen, font, m, quiz_data, curr_u, users, screen_width, screen_height, scale)
             elif act == "add":
-                m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
-                if m: add_question_screen(screen, font, quiz_data, m, curr_u, users, screen_width, screen_height, scale)
+                # Dodatkowe sprawdzenie uprawnień (na wypadek próby ominięcia)
+                if is_mod:
+                    m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
+                    if m: add_question_screen(screen, font, quiz_data, m, curr_u, users, screen_width, screen_height, scale)
             elif act == "del":
-                m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
-                if m: delete_manager_screen(screen, font, quiz_data, m, screen_width, screen_height, scale)
+                # Dodatkowe sprawdzenie uprawnień (na wypadek próby ominięcia)
+                if is_mod:
+                    m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
+                    if m: delete_manager_screen(screen, font, quiz_data, m, screen_width, screen_height, scale)
             elif act == "ach":
                 show_achievements(screen, font, curr_u, users, screen_width, screen_height, scale)
             elif act == "rank":
