@@ -5,6 +5,9 @@ import random
 import math
 import hashlib
 import re
+import mysql.connector
+from mysql.connector import Error
+from typing import Dict, List, Optional, Tuple
 
 # ================== KONFIGURACJA ==================
 MIN_WIDTH, MIN_HEIGHT = 800, 600
@@ -16,8 +19,18 @@ BTN_HOVER = (100, 100, 240)
 BTN_LOCKED = (50, 50, 80)
 INPUT_BG = (50, 50, 50)
 BASE_FONT_SIZE = 22
-DATA_FILE = "quiz_data.json"
-USERS_FILE = "users.json"
+
+# Konfiguracja MySQL
+DB_CONFIG = {
+    'host': 'localhost',
+    'database': 'quiz_db',
+    'user': 'root',
+    'password': 'root',
+    'charset': 'utf8mb4',
+    'collation': 'utf8mb4_unicode_ci',
+    'unix_socket': '/Applications/MAMP/tmp/mysql/mysql.sock',
+    'autocommit': False
+}
 
 # Lista dozwolonych kont moderatorów (tylko te konta mogą być moderatorskie)
 # Maksymalnie 3 konta mogą być moderatorskie
@@ -78,41 +91,493 @@ def validate_password(password):
     return True, ""
 
 
-def load_json(path, default):
-    """Bezpieczne ładowanie JSON z obsługą błędów"""
-    if not os.path.exists(path):
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(default, f, indent=2)
-        except (IOError, OSError) as e:
-            print(f"Błąd przy tworzeniu pliku {path}: {e}")
-        return default
+# ================== POŁĄCZENIE Z BAZĄ DANYCH ==================
+
+def get_db_connection():
+    """Tworzy połączenie z bazą danych MySQL"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data
-    except (json.JSONDecodeError, IOError, OSError) as e:
-        print(f"Błąd przy ładowaniu {path}: {e}")
-        return default
+        connection = mysql.connector.connect(**DB_CONFIG)
+        return connection
+    except Error as e:
+        print(f"Błąd połączenia z bazą danych: {e}")
+        return None
 
 
-def save_json(path, data):
-    """Bezpieczne zapisywanie JSON z obsługą błędów"""
+def init_database():
+    """Inicjalizuje bazę danych i tworzy tabele jeśli nie istnieją"""
     try:
-        # Tworzenie backupu przed zapisem
-        if os.path.exists(path):
-            backup_path = path + ".backup"
-            try:
-                with open(path, "r", encoding="utf-8") as src:
-                    with open(backup_path, "w", encoding="utf-8") as dst:
-                        dst.write(src.read())
-            except:
-                pass
+        # Połączenie bez wyboru bazy danych (do utworzenia bazy)
+        config_no_db = DB_CONFIG.copy()
+        db_name = config_no_db.pop('database')
         
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except (IOError, OSError) as e:
-        print(f"Błąd przy zapisywaniu {path}: {e}")
+        connection = mysql.connector.connect(**config_no_db)
+        cursor = connection.cursor()
+        
+        # Utworzenie bazy danych jeśli nie istnieje
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        cursor.execute(f"USE {db_name}")
+        
+        # Tabela użytkowników
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username VARCHAR(20) PRIMARY KEY,
+                password_hash VARCHAR(64) NOT NULL,
+                is_mod BOOLEAN DEFAULT FALSE,
+                xp INT DEFAULT 0,
+                stats_correct INT DEFAULT 0,
+                stats_wrong INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Tabela modułów
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS modules (
+                module_name VARCHAR(50) PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Tabela pytań
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS questions (
+                question_id INT AUTO_INCREMENT PRIMARY KEY,
+                module_name VARCHAR(50) NOT NULL,
+                question_text TEXT NOT NULL,
+                option_a VARCHAR(200) NOT NULL,
+                option_b VARCHAR(200) NOT NULL,
+                option_c VARCHAR(200) NOT NULL,
+                option_d VARCHAR(200) NOT NULL,
+                correct_answer INT NOT NULL CHECK (correct_answer BETWEEN 0 AND 3),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (module_name) REFERENCES modules(module_name) ON DELETE CASCADE,
+                INDEX idx_module (module_name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Tabela osiągnięć użytkowników
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                username VARCHAR(20),
+                achievement_id VARCHAR(50),
+                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (username, achievement_id),
+                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        # Tabela odblokowanych modułów użytkowników
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_unlocked_modules (
+                username VARCHAR(20),
+                module_name VARCHAR(50),
+                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (username, module_name),
+                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
+                FOREIGN KEY (module_name) REFERENCES modules(module_name) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        print("Baza danych zainicjalizowana pomyślnie.")
+        return True
+    except Error as e:
+        print(f"Błąd przy inicjalizacji bazy danych: {e}")
+        return False
+
+
+# ================== OPERACJE NA BAZIE DANYCH ==================
+
+def get_all_users() -> Dict:
+    """Pobiera wszystkich użytkowników z bazy danych"""
+    connection = get_db_connection()
+    if not connection:
+        return {}
+    
+    users = {}
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        # Pobierz użytkowników
+        cursor.execute("SELECT * FROM users")
+        user_rows = cursor.fetchall()
+        
+        for user_row in user_rows:
+            username = user_row['username']
+            
+            # Pobierz osiągnięcia
+            cursor.execute("SELECT achievement_id FROM user_achievements WHERE username = %s", (username,))
+            achievements = [row['achievement_id'] for row in cursor.fetchall()]
+            
+            # Pobierz odblokowane moduły
+            cursor.execute("SELECT module_name FROM user_unlocked_modules WHERE username = %s", (username,))
+            unlocked = [row['module_name'] for row in cursor.fetchall()]
+            
+            users[username] = {
+                'pw': user_row['password_hash'],
+                'is_mod': bool(user_row['is_mod']),
+                'xp': user_row['xp'],
+                'stats_correct': user_row['stats_correct'],
+                'stats_wrong': user_row['stats_wrong'],
+                'achievements': achievements,
+                'unlocked': unlocked
+            }
+        
+        cursor.close()
+    except Error as e:
+        print(f"Błąd przy pobieraniu użytkowników: {e}")
+    finally:
+        connection.close()
+    
+    return users
+
+
+def save_user(username: str, user_data: Dict):
+    """Zapisuje lub aktualizuje użytkownika w bazie danych"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        
+        # Sprawdź czy użytkownik istnieje
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        exists = cursor.fetchone() is not None
+        
+        if exists:
+            # Aktualizuj użytkownika
+            cursor.execute("""
+                UPDATE users 
+                SET password_hash = %s, is_mod = %s, xp = %s, 
+                    stats_correct = %s, stats_wrong = %s
+                WHERE username = %s
+            """, (
+                user_data['pw'],
+                user_data.get('is_mod', False),
+                user_data.get('xp', 0),
+                user_data.get('stats_correct', 0),
+                user_data.get('stats_wrong', 0),
+                username
+            ))
+        else:
+            # Dodaj nowego użytkownika
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, is_mod, xp, stats_correct, stats_wrong)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                username,
+                user_data['pw'],
+                user_data.get('is_mod', False),
+                user_data.get('xp', 0),
+                user_data.get('stats_correct', 0),
+                user_data.get('stats_wrong', 0)
+            ))
+        
+        # Aktualizuj osiągnięcia
+        cursor.execute("DELETE FROM user_achievements WHERE username = %s", (username,))
+        for achievement in user_data.get('achievements', []):
+            cursor.execute("""
+                INSERT INTO user_achievements (username, achievement_id)
+                VALUES (%s, %s)
+            """, (username, achievement))
+        
+        # Aktualizuj odblokowane moduły
+        cursor.execute("DELETE FROM user_unlocked_modules WHERE username = %s", (username,))
+        for module in user_data.get('unlocked', []):
+            cursor.execute("""
+                INSERT INTO user_unlocked_modules (username, module_name)
+                VALUES (%s, %s)
+            """, (username, module))
+        
+        connection.commit()
+        cursor.close()
+        return True
+    except Error as e:
+        print(f"Błąd przy zapisywaniu użytkownika: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def get_quiz_data() -> Dict:
+    """Pobiera wszystkie pytania quizu z bazy danych, pogrupowane według modułów"""
+    connection = get_db_connection()
+    if not connection:
+        return {}
+    
+    quiz_data = {}
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        # Pobierz wszystkie moduły
+        cursor.execute("SELECT module_name FROM modules")
+        modules = [row['module_name'] for row in cursor.fetchall()]
+        
+        # Dla każdego modułu pobierz pytania
+        for module in modules:
+            cursor.execute("""
+                SELECT question_text, option_a, option_b, option_c, option_d, correct_answer
+                FROM questions
+                WHERE module_name = %s
+            """, (module,))
+            
+            questions = []
+            for row in cursor.fetchall():
+                questions.append({
+                    'question': row['question_text'],
+                    'options': [
+                        row['option_a'],
+                        row['option_b'],
+                        row['option_c'],
+                        row['option_d']
+                    ],
+                    'correct': row['correct_answer']
+                })
+            
+            quiz_data[module] = questions
+        
+        cursor.close()
+    except Error as e:
+        print(f"Błąd przy pobieraniu danych quizu: {e}")
+    finally:
+        connection.close()
+    
+    return quiz_data
+
+
+def add_module(module_name: str):
+    """Dodaje nowy moduł do bazy danych"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("INSERT IGNORE INTO modules (module_name) VALUES (%s)", (module_name,))
+        connection.commit()
+        cursor.close()
+        return True
+    except Error as e:
+        print(f"Błąd przy dodawaniu modułu: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def add_question(module_name: str, question_data: Dict):
+    """Dodaje nowe pytanie do bazy danych"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            INSERT INTO questions (module_name, question_text, option_a, option_b, option_c, option_d, correct_answer)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            module_name,
+            question_data['question'],
+            question_data['options'][0],
+            question_data['options'][1],
+            question_data['options'][2],
+            question_data['options'][3],
+            question_data['correct']
+        ))
+        connection.commit()
+        cursor.close()
+        return True
+    except Error as e:
+        print(f"Błąd przy dodawaniu pytania: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def delete_question(module_name: str, question_index: int):
+    """Usuwa pytanie z bazy danych"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        # Pobierz ID pytania na podstawie indeksu w module
+        cursor.execute("""
+            SELECT question_id FROM questions
+            WHERE module_name = %s
+            ORDER BY question_id
+            LIMIT 1 OFFSET %s
+        """, (module_name, question_index))
+        
+        result = cursor.fetchone()
+        if result:
+            question_id = result[0]
+            cursor.execute("DELETE FROM questions WHERE question_id = %s", (question_id,))
+            connection.commit()
+            cursor.close()
+            return True
+        cursor.close()
+        return False
+    except Error as e:
+        print(f"Błąd przy usuwaniu pytania: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def get_module_questions(module_name: str) -> List[Dict]:
+    """Pobiera wszystkie pytania dla danego modułu"""
+    connection = get_db_connection()
+    if not connection:
+        return []
+    
+    questions = []
+    try:
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT question_text, option_a, option_b, option_c, option_d, correct_answer
+            FROM questions
+            WHERE module_name = %s
+        """, (module_name,))
+        
+        for row in cursor.fetchall():
+            questions.append({
+                'question': row['question_text'],
+                'options': [
+                    row['option_a'],
+                    row['option_b'],
+                    row['option_c'],
+                    row['option_d']
+                ],
+                'correct': row['correct_answer']
+            })
+        
+        cursor.close()
+    except Error as e:
+        print(f"Błąd przy pobieraniu pytań modułu: {e}")
+    finally:
+        connection.close()
+    
+    return questions
+
+
+def update_user_stats(username: str, xp_delta: int = 0, correct_delta: int = 0, wrong_delta: int = 0):
+    """Aktualizuje statystyki użytkownika"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET xp = xp + %s, stats_correct = stats_correct + %s, stats_wrong = stats_wrong + %s
+            WHERE username = %s
+        """, (xp_delta, correct_delta, wrong_delta, username))
+        connection.commit()
+        cursor.close()
+        return True
+    except Error as e:
+        print(f"Błąd przy aktualizacji statystyk użytkownika: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def get_user_stats(username: str) -> Optional[Dict]:
+    """Pobiera statystyki użytkownika"""
+    connection = get_db_connection()
+    if not connection:
+        return None
+    
+    try:
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT xp, stats_correct, stats_wrong, is_mod
+            FROM users WHERE username = %s
+        """, (username,))
+        result = cursor.fetchone()
+        cursor.close()
+        return result
+    except Error as e:
+        print(f"Błąd przy pobieraniu statystyk użytkownika: {e}")
+        return None
+    finally:
+        connection.close()
+
+
+def unlock_module_for_user(username: str, module_name: str):
+    """Odblokowuje moduł dla użytkownika"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            INSERT IGNORE INTO user_unlocked_modules (username, module_name)
+            VALUES (%s, %s)
+        """, (username, module_name))
+        connection.commit()
+        cursor.close()
+        return True
+    except Error as e:
+        print(f"Błąd przy odblokowywaniu modułu: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
+def get_user_unlocked_modules(username: str) -> List[str]:
+    """Pobiera listę odblokowanych modułów użytkownika"""
+    connection = get_db_connection()
+    if not connection:
+        return []
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT module_name FROM user_unlocked_modules WHERE username = %s
+        """, (username,))
+        modules = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        return modules
+    except Error as e:
+        print(f"Błąd przy pobieraniu odblokowanych modułów: {e}")
+        return []
+    finally:
+        connection.close()
+
+
+def get_user_achievements(username: str) -> List[str]:
+    """Pobiera listę osiągnięć użytkownika"""
+    connection = get_db_connection()
+    if not connection:
+        return []
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT achievement_id FROM user_achievements WHERE username = %s
+        """, (username,))
+        achievements = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        return achievements
+    except Error as e:
+        print(f"Błąd przy pobieraniu osiągnięć: {e}")
+        return []
+    finally:
+        connection.close()
 
 
 def get_level(xp):
@@ -120,60 +585,6 @@ def get_level(xp):
     return int((xp / 100) ** (1 / 1.5)) + 1
 
 
-def migrate_user_data(users, quiz_data):
-    """
-    Migruje stare nazwy modułów i osiągnięć do nowych nazw.
-    Stare nazwy: Podstawy, Technologia, Nauka
-    Nowe nazwy: Agile_Podstawy, Scrum, Praktyki
-    """
-    # Mapowanie starych nazw modułów na nowe
-    module_mapping = {
-        "Podstawy": "Agile_Podstawy",
-        "Technologia": "Scrum",
-        "Nauka": "Praktyki"
-    }
-    
-    # Mapowanie starych osiągnięć na nowe
-    achievement_mapping = {
-        "perfection_Podstawy": "perfection_Agile_Podstawy",
-        "perfection_Technologia": "perfection_Scrum",
-        "perfection_Nauka": "perfection_Praktyki"
-    }
-    
-    changed = False
-    
-    for username, user_data in users.items():
-        # Migracja odblokowanych modułów
-        if "unlocked" in user_data and isinstance(user_data["unlocked"], list):
-            new_unlocked = []
-            for module in user_data["unlocked"]:
-                if module in module_mapping:
-                    new_module = module_mapping[module]
-                    # Dodaj tylko jeśli nowy moduł istnieje w quiz_data
-                    if new_module in quiz_data and new_module not in new_unlocked:
-                        new_unlocked.append(new_module)
-                    changed = True
-                elif module in quiz_data and module not in new_unlocked:
-                    # Moduł już ma nową nazwę, zostaw go
-                    new_unlocked.append(module)
-            user_data["unlocked"] = new_unlocked
-        
-        # Migracja osiągnięć
-        if "achievements" in user_data and isinstance(user_data["achievements"], list):
-            new_achievements = []
-            for achievement in user_data["achievements"]:
-                if achievement in achievement_mapping:
-                    new_achievement = achievement_mapping[achievement]
-                    if new_achievement not in new_achievements:
-                        new_achievements.append(new_achievement)
-                    changed = True
-                else:
-                    # Osiągnięcie już ma nową nazwę lub nie wymaga migracji
-                    if achievement not in new_achievements:
-                        new_achievements.append(achievement)
-            user_data["achievements"] = new_achievements
-    
-    return changed
 
 
 ACHIEVEMENTS_DEF = {
@@ -188,12 +599,37 @@ ACHIEVEMENTS_DEF = {
 }
 
 
-def check_achievement(username, users, ach_id):
-    if ach_id not in users[username]["achievements"]:
-        users[username]["achievements"].append(ach_id)
-        save_json(USERS_FILE, users)
-        return True
-    return False
+def check_achievement(username, ach_id):
+    """Sprawdza i dodaje osiągnięcie użytkownika jeśli jeszcze go nie ma"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        # Sprawdź czy osiągnięcie już istnieje
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_achievements
+            WHERE username = %s AND achievement_id = %s
+        """, (username, ach_id))
+        
+        if cursor.fetchone()[0] == 0:
+            # Dodaj osiągnięcie
+            cursor.execute("""
+                INSERT INTO user_achievements (username, achievement_id)
+                VALUES (%s, %s)
+            """, (username, ach_id))
+            connection.commit()
+            cursor.close()
+            return True
+        cursor.close()
+        return False
+    except Error as e:
+        print(f"Błąd przy sprawdzaniu osiągnięcia: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
 
 
 def truncate_text(text, font, max_width):
@@ -405,7 +841,7 @@ class Checkbox:
 
 # ================== WIDOKI TABELARYCZNE ==================
 
-def show_achievements(screen, font, username, users, screen_width, screen_height, scale):
+def show_achievements(screen, font, username, screen_width, screen_height, scale):
     back_btn = Button(375, 750, 200, "Powrót", font, scale=scale, screen_width=screen_width, center_horizontal=True)
     # Kolumny dla tabeli achievementów - wyśrodkowane
     table_width = scale_value(790, scale)  # przybliżona szerokość tabeli
@@ -437,8 +873,9 @@ def show_achievements(screen, font, username, users, screen_width, screen_height
         y_off = scale_value(150, scale)
         row_spacing = scale_value(40, scale)
         desc_width = scale_value(400, scale)
+        user_achievements = get_user_achievements(username)
         for ach_id, info in ACHIEVEMENTS_DEF.items():
-            has_it = ach_id in users[username].get("achievements", [])
+            has_it = ach_id in user_achievements
             color = (100, 255, 100) if has_it else (100, 100, 100)
 
             status_txt = "[ V ]" if has_it else "[   ]"
@@ -468,8 +905,9 @@ def show_achievements(screen, font, username, users, screen_width, screen_height
             if back_btn.clicked(event): return
 
 
-def show_leaderboard(screen, font, users, screen_width, screen_height, scale):
+def show_leaderboard(screen, font, screen_width, screen_height, scale):
     back_btn = Button(375, 650, 200, "Powrót", font, scale=scale, screen_width=screen_width, center_horizontal=True)
+    users = get_all_users()
     sorted_users = sorted(users.items(), key=lambda x: x[1].get('xp', 0), reverse=True)[:5]
     # Wyśrodkowanie tabeli
     table_width = scale_value(570, scale)
@@ -521,9 +959,10 @@ def show_leaderboard(screen, font, users, screen_width, screen_height, scale):
 
 # ================== MODYFIKACJA PYTAŃ ==================
 
-def add_question_screen(screen, font, data, module, username, users, screen_width, screen_height, scale):
+def add_question_screen(screen, font, module, username, screen_width, screen_height, scale):
     # Sprawdzenie uprawnień - tylko moderatorzy mogą dodawać pytania
-    if not users.get(username, {}).get("is_mod", False):
+    user_data = get_all_users().get(username, {})
+    if not user_data.get("is_mod", False):
         screen.fill(BG_COLOR)
         error_msg = font.render("Brak uprawnień! Tylko moderatorzy mogą dodawać pytania.", True, (255, 100, 100))
         screen.blit(error_msg, (screen_width // 2 - error_msg.get_width() // 2, screen_height // 2))
@@ -597,21 +1036,23 @@ def add_question_screen(screen, font, data, module, username, users, screen_widt
                 elif any(len(opt) > MAX_OPTION_LEN for opt in options):
                     msg = f"Opcje mogą mieć maksymalnie {MAX_OPTION_LEN} znaków!"
                 else:
-                    data[module].append({
+                    question_data = {
                         "question": question,
                         "options": options,
                         "correct": "ABCD".index(ans)
-                    })
-                    save_json(DATA_FILE, data)
-                    check_achievement(username, users, "add_q")
-                    msg = "Dodano pomyślnie!"
-                    for i in inputs: i.text = ""
+                    }
+                    if add_question(module, question_data):
+                        check_achievement(username, "add_q")
+                        msg = "Dodano pomyślnie!"
+                        for i in inputs: i.text = ""
+                    else:
+                        msg = "Błąd przy dodawaniu pytania!"
 
 
 # ================== QUIZ I LOGIKA ODBLOKOWANIA ==================
 
-def quiz_loop(screen, font, module_name, quiz_data, username, users, screen_width, screen_height, scale):
-    questions = list(quiz_data[module_name])
+def quiz_loop(screen, font, module_name, username, screen_width, screen_height, scale):
+    questions = get_module_questions(module_name)
     if not questions:
         screen.fill(BG_COLOR)
         msg = font.render("Brak pytań w tym module!", True, (255, 100, 100))
@@ -666,32 +1107,40 @@ def quiz_loop(screen, font, module_name, quiz_data, username, users, screen_widt
                 for b in ans_btns:
                     if b.clicked(event):
                         correct = b.data == correct_content
-                        users[username]["xp"] += 15 if correct else 5
+                        xp_delta = 15 if correct else 5
+                        correct_delta = 1 if correct else 0
+                        wrong_delta = 0 if correct else 1
+                        
+                        update_user_stats(username, xp_delta, correct_delta, wrong_delta)
+                        
                         if correct:
                             score += 1
-                            users[username]["stats_correct"] += 1
-                        else:
-                            users[username]["stats_wrong"] += 1
                         idx += 1;
                         answered = True;
-                        save_json(USERS_FILE, users)
 
-    if users[username]["stats_correct"] >= 25: check_achievement(username, users, "correct_25")
-    if users[username]["stats_wrong"] >= 10: check_achievement(username, users, "wrong_10")
-    check_achievement(username, users, "first_quiz")
+    # Sprawdź osiągnięcia na podstawie aktualnych statystyk
+    stats = get_user_stats(username)
+    if stats:
+        if stats['stats_correct'] >= 25:
+            check_achievement(username, "correct_25")
+        if stats['stats_wrong'] >= 10:
+            check_achievement(username, "wrong_10")
+        check_achievement(username, "first_quiz")
 
     unlocked_msg = ""
     if score == total:
-        check_achievement(username, users, f"perfection_{module_name}")
+        check_achievement(username, f"perfection_{module_name}")
+        # Pobierz listę modułów z bazy
+        quiz_data = get_quiz_data()
         module_list = list(quiz_data.keys())
         if module_name in module_list:
             current_idx = module_list.index(module_name)
             if current_idx + 1 < len(module_list):
                 next_mod = module_list[current_idx + 1]
-                if next_mod not in users[username]["unlocked"]:
-                    users[username]["unlocked"].append(next_mod)
+                unlocked_modules = get_user_unlocked_modules(username)
+                if next_mod not in unlocked_modules:
+                    unlock_module_for_user(username, next_mod)
                     unlocked_msg = f"BRAWO! ODBLOKOWANO: {next_mod}"
-                    save_json(USERS_FILE, users)
 
     screen.fill(BG_COLOR)
     res_t = font.render(f"KONIEC! WYNIK: {score}/{total}", True, (255, 255, 255))
@@ -705,7 +1154,7 @@ def quiz_loop(screen, font, module_name, quiz_data, username, users, screen_widt
 
 # ================== LOGOWANIE I REJESTRACJA ==================
 
-def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, scale):
+def auth_screen(screen, font, screen_width, screen_height, scale):
     mode = "login";
     u_box = InputBox((325, 250, 300, 45), "Username", scale=scale, screen_width=screen_width, center_horizontal=True)
     p_box = InputBox((325, 310, 300, 45), "Password", password=True, scale=scale, screen_width=screen_width, center_horizontal=True)
@@ -766,81 +1215,88 @@ def auth_screen(screen, font, users, quiz_data, screen_width, screen_height, sca
                         feedback = username_msg
                     elif not password_valid:
                         feedback = password_msg
-                    elif u in users:
-                        feedback = "Użytkownik już istnieje!"
                     else:
-                        first_mod = list(quiz_data.keys())[0] if quiz_data else ""
-                        # Ustaw is_mod na True tylko jeśli użytkownik jest na liście moderatorów
-                        is_moderator = u in MODERATOR_USERS
-                        users[u] = {
-                            "pw": hash_password(p),  # Hashowanie hasła
-                            "is_mod": is_moderator,  # Tylko użytkownicy z listy mogą być moderatorami
-                            "xp": 0,
-                            "unlocked": [first_mod] if first_mod else [],
-                            "achievements": [],
-                            "stats_correct": 0,
-                            "stats_wrong": 0
-                        }
-                        save_json(USERS_FILE, users);
-                        mode = "login"
-                        feedback = "Konto założone! Zaloguj się."
-                        u_box.text = ""
-                        p_box.text = ""
+                        # Sprawdź czy użytkownik już istnieje w bazie
+                        users = get_all_users()
+                        if u in users:
+                            feedback = "Użytkownik już istnieje!"
+                        else:
+                            # Pobierz pierwszy moduł z bazy
+                            quiz_data = get_quiz_data()
+                            first_mod = list(quiz_data.keys())[0] if quiz_data else ""
+                            
+                            # Ustaw is_mod na True tylko jeśli użytkownik jest na liście moderatorów
+                            is_moderator = u in MODERATOR_USERS
+                            
+                            # Utwórz nowego użytkownika
+                            new_user = {
+                                "pw": hash_password(p),
+                                "is_mod": is_moderator,
+                                "xp": 0,
+                                "unlocked": [first_mod] if first_mod else [],
+                                "achievements": [],
+                                "stats_correct": 0,
+                                "stats_wrong": 0
+                            }
+                            
+                            if save_user(u, new_user):
+                                # Odblokuj pierwszy moduł jeśli istnieje
+                                if first_mod:
+                                    unlock_module_for_user(u, first_mod)
+                                mode = "login"
+                                feedback = "Konto założone! Zaloguj się."
+                                u_box.text = ""
+                                p_box.text = ""
+                            else:
+                                feedback = "Błąd przy rejestracji!"
                 else:
                     if not u:
                         feedback = "Wprowadź nazwę użytkownika"
                     elif not p:
                         feedback = "Wprowadź hasło"
-                    elif u in users:
-                        # Sprawdzanie hasła (może być w starym formacie lub nowym)
-                        stored_pw = users[u].get("pw", "")
-                        # Kompatybilność wsteczna - jeśli hasło jest w plain text, przekształć na hash
-                        if len(stored_pw) < 64:  # SHA-256 hash ma 64 znaki hex
-                            if stored_pw == p:  # Stary format - plain text
-                                users[u]["pw"] = hash_password(p)
-                                save_json(USERS_FILE, users)
-                            else:
+                    else:
+                        users = get_all_users()
+                        if u in users:
+                            # Sprawdzanie hasła
+                            stored_pw = users[u].get("pw", "")
+                            # Kompatybilność wsteczna - jeśli hasło jest w plain text, przekształć na hash
+                            if len(stored_pw) < 64:  # SHA-256 hash ma 64 znaki hex
+                                if stored_pw == p:  # Stary format - plain text
+                                    users[u]["pw"] = hash_password(p)
+                                    save_user(u, users[u])
+                                else:
+                                    feedback = "Błędny login lub hasło!"
+                                    continue
+                            elif not verify_password(p, stored_pw):
                                 feedback = "Błędny login lub hasło!"
                                 continue
-                        elif not verify_password(p, stored_pw):
+                            
+                            # Naprawa starych kont - upewnij się że użytkownik ma wszystkie wymagane pola
+                            quiz_data = get_quiz_data()
+                            first_mod = list(quiz_data.keys())[0] if quiz_data else ""
+                            user_data = users[u]
+                            changed = False
+                            
+                            # Upewnij się że użytkownik ma odblokowany pierwszy moduł jeśli nie ma żadnego
+                            unlocked_modules = get_user_unlocked_modules(u)
+                            if not unlocked_modules and first_mod:
+                                unlock_module_for_user(u, first_mod)
+                                changed = True
+                            
+                            if changed:
+                                # Odśwież dane użytkownika
+                                user_data['unlocked'] = get_user_unlocked_modules(u)
+                                save_user(u, user_data)
+                            
+                            return u
+                        else:
                             feedback = "Błędny login lub hasło!"
-                            continue
-                        
-                        # Migracja danych użytkownika (na wypadek, gdyby migracja nie została wykonana przy starcie)
-                        migrate_user_data({u: users[u]}, quiz_data)
-                        
-                        # Naprawa starych kont
-                        changed = False
-                        first_mod = list(quiz_data.keys())[0] if quiz_data else ""
-                        for key, val in {
-                            "achievements": [],
-                            "unlocked": [first_mod] if first_mod else [],
-                            "stats_correct": 0,
-                            "stats_wrong": 0
-                        }.items():
-                            if key not in users[u]:
-                                users[u][key] = val
-                                changed = True
-                        
-                        # Jeśli unlocked jest puste lub zawiera tylko nieistniejące moduły, dodaj pierwszy moduł
-                        if "unlocked" in users[u] and isinstance(users[u]["unlocked"], list):
-                            existing_unlocked = [m for m in users[u]["unlocked"] if m in quiz_data]
-                            if not existing_unlocked and first_mod:
-                                users[u]["unlocked"] = [first_mod]
-                                changed = True
-                            elif existing_unlocked != users[u]["unlocked"]:
-                                users[u]["unlocked"] = existing_unlocked
-                                changed = True
-                        
-                        if changed:
-                            save_json(USERS_FILE, users)
-                        return u
-                    else:
-                        feedback = "Błędny login lub hasło!"
 
 
-def select_module_screen(screen, font, data, user_unlocked, is_mod, screen_width, screen_height, scale):
+def select_module_screen(screen, font, username, is_mod, screen_width, screen_height, scale):
     back_btn = Button(375, 750, 200, "Powrót", font, scale=scale, screen_width=screen_width, center_horizontal=True)
+    quiz_data = get_quiz_data()
+    user_unlocked = get_user_unlocked_modules(username)
     while True:
         screen.fill(BG_COLOR);
         mouse = pygame.mouse.get_pos()
@@ -848,7 +1304,7 @@ def select_module_screen(screen, font, data, user_unlocked, is_mod, screen_width
         btn_width = scale_value(400, scale)
         start_y = scale_value(120, scale)
         btn_spacing = scale_value(90, scale)
-        for i, m_name in enumerate(data.keys()):
+        for i, m_name in enumerate(quiz_data.keys()):
             locked = (m_name not in user_unlocked) and not is_mod
             btn_text = f"{m_name} {'[ZABLOKOWANE]' if locked else ''}"
             m_btns.append(
@@ -878,17 +1334,18 @@ def select_module_screen(screen, font, data, user_unlocked, is_mod, screen_width
                 if b.clicked(event): return b.data
 
 
-def delete_manager_screen(screen, font, data, module, screen_width, screen_height, scale):
+def delete_manager_screen(screen, font, module, screen_width, screen_height, scale):
     while True:
         screen.fill(BG_COLOR);
         mouse = pygame.mouse.get_pos()
-        if not data[module]: return
+        questions = get_module_questions(module)
+        if not questions: return
         btns = []
         btn_width = scale_value(750, scale)
         start_y = scale_value(70, scale)
         btn_spacing = scale_value(55, scale)
         question_width = scale_value(700, scale)
-        for i, q in enumerate(data[module]):
+        for i, q in enumerate(questions):
             txt = truncate_text(q.get("question", ""), font, question_width)
             btns.append(Button(100, start_y + i * btn_spacing, btn_width, txt, font, padding=scale_value(8, scale), data=i, scale=scale, screen_width=screen_width, center_horizontal=True))
         back = Button(375, 750, 200, "Powrót", font, scale=scale, screen_width=screen_width, center_horizontal=True)
@@ -914,10 +1371,9 @@ def delete_manager_screen(screen, font, data, module, screen_width, screen_heigh
             if back.clicked(event): return
             for b in btns:
                 if b.clicked(event):
-                    if 0 <= b.data < len(data[module]):
-                        data[module].pop(b.data);
-                        save_json(DATA_FILE, data);
-                    break
+                    if 0 <= b.data < len(questions):
+                        delete_question(module, b.data)
+                        break
 
 
 # ================== MAIN ==================
@@ -928,25 +1384,23 @@ def main():
     pygame.display.set_caption("Quiz Agile/Scrum")
     clock = pygame.time.Clock()
     
+    # Inicjalizacja bazy danych
+    print("Inicjalizacja bazy danych...")
+    if not init_database():
+        print("BŁĄD: Nie można zainicjalizować bazy danych!")
+        print("Upewnij się, że MySQL jest uruchomiony i dane w DB_CONFIG są poprawne.")
+        return
+    
+    # Utworzenie domyślnych modułów jeśli nie istnieją
+    default_modules = ["Agile_Podstawy", "Scrum", "Praktyki"]
+    for module in default_modules:
+        add_module(module)
+    
     # Pobieranie aktualnych wymiarów ekranu
     screen_width, screen_height = screen.get_size()
     scale = get_scale_factor(screen_width, screen_height)
     font_size = get_font_size(scale)
     font = pygame.font.SysFont("Arial", font_size)
-    
-    # Domyślne moduły Agile/Scrum
-    default_modules = {
-        "Agile_Podstawy": [],
-        "Scrum": [],
-        "Praktyki": []
-    }
-    quiz_data = load_json(DATA_FILE, default_modules)
-    users = load_json(USERS_FILE, {})
-    
-    # Migracja danych użytkowników do nowych nazw modułów
-    if migrate_user_data(users, quiz_data):
-        save_json(USERS_FILE, users)
-        print("Dokonano migracji danych użytkowników do nowych nazw modułów.")
 
     while True:
         screen_width, screen_height = screen.get_size()
@@ -962,7 +1416,7 @@ def main():
         font_size = get_font_size(scale)
         font = pygame.font.SysFont("Arial", font_size)
         
-        curr_u = auth_screen(screen, font, users, quiz_data, screen_width, screen_height, scale)
+        curr_u = auth_screen(screen, font, screen_width, screen_height, scale)
 
         while True:
             screen_width, screen_height = screen.get_size()
@@ -977,11 +1431,16 @@ def main():
             font_size = get_font_size(scale)
             font = pygame.font.SysFont("Arial", font_size)
             
-            is_mod = users[curr_u]["is_mod"]
+            # Pobierz aktualne dane użytkownika z bazy
+            users = get_all_users()
+            user_data = users.get(curr_u, {})
+            is_mod = user_data.get("is_mod", False)
+            user_xp = user_data.get("xp", 0)
+            
             screen.fill(BG_COLOR);
             mouse = pygame.mouse.get_pos()
-            lvl = get_level(users[curr_u]["xp"])
-            stats_text = f"Gracz: {curr_u} | LVL: {lvl} | XP: {users[curr_u]['xp']}"
+            lvl = get_level(user_xp)
+            stats_text = f"Gracz: {curr_u} | LVL: {lvl} | XP: {user_xp}"
             stats_surf = font.render(stats_text, True, (200, 200, 100))
             screen.blit(stats_surf, (scale_value(20, scale), scale_value(20, scale)))
 
@@ -1024,22 +1483,22 @@ def main():
                     if b.clicked(event): act = b.data
 
             if act == "start":
-                m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
-                if m: quiz_loop(screen, font, m, quiz_data, curr_u, users, screen_width, screen_height, scale)
+                m = select_module_screen(screen, font, curr_u, is_mod, screen_width, screen_height, scale)
+                if m: quiz_loop(screen, font, m, curr_u, screen_width, screen_height, scale)
             elif act == "add":
                 # Dodatkowe sprawdzenie uprawnień (na wypadek próby ominięcia)
                 if is_mod:
-                    m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
-                    if m: add_question_screen(screen, font, quiz_data, m, curr_u, users, screen_width, screen_height, scale)
+                    m = select_module_screen(screen, font, curr_u, is_mod, screen_width, screen_height, scale)
+                    if m: add_question_screen(screen, font, m, curr_u, screen_width, screen_height, scale)
             elif act == "del":
                 # Dodatkowe sprawdzenie uprawnień (na wypadek próby ominięcia)
                 if is_mod:
-                    m = select_module_screen(screen, font, quiz_data, users[curr_u]["unlocked"], is_mod, screen_width, screen_height, scale)
-                    if m: delete_manager_screen(screen, font, quiz_data, m, screen_width, screen_height, scale)
+                    m = select_module_screen(screen, font, curr_u, is_mod, screen_width, screen_height, scale)
+                    if m: delete_manager_screen(screen, font, m, screen_width, screen_height, scale)
             elif act == "ach":
-                show_achievements(screen, font, curr_u, users, screen_width, screen_height, scale)
+                show_achievements(screen, font, curr_u, screen_width, screen_height, scale)
             elif act == "rank":
-                show_leaderboard(screen, font, users, screen_width, screen_height, scale)
+                show_leaderboard(screen, font, screen_width, screen_height, scale)
             elif act == "logout":
                 break
             
